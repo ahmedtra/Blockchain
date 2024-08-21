@@ -58,24 +58,42 @@ async fn  main() {
 
     let peers_send = Arc::clone(&peers);
 
-    let peers_to_process = {
+    let mut peers_to_process = {
         let peers_lock = peers_send.lock().await;
         peers_lock.clone()  // Clone the list of peers
     };
  
 
-    for peer in peers_to_process {
-
+    for peer in &peers_to_process {
         let blockchain = Arc::clone(&blockchain);
         let peers = Arc::clone(&peers);
+        if peer != address{
 
-        
-        tokio::spawn(models::connection::connect_and_sync(peer.clone(), blockchain.clone()));
-        models::connection::start_listener(peer.clone(), blockchain, peers).await.unwrap();
+            println!("connect to {}", peer);
+            tokio::spawn(models::connection::connect_and_sync(peer.clone(), address.to_string().clone(), blockchain.clone())); 
+        }
+        tokio::spawn(models::connection::start_listener(peer.clone(), blockchain, peers));
     }
     
     loop {
-        let peers = peers_send.lock().await;
+        let peers_send = Arc::clone(&peers);
+
+        let peers_to_process_new = {
+            let peers_lock = peers_send.lock().await;
+            peers_lock.clone()  // Clone the list of peers
+        };
+
+        for peer in &peers_to_process_new {
+            if !peers_to_process.contains(&peer)
+            {
+                let blockchain = Arc::clone(&blockchain);
+                let peers = Arc::clone(&peers);
+                println!("connect to {}", peer);
+                models::connection::start_listener(peer.clone(), blockchain, peers).await;
+            }
+        }
+
+        peers_to_process = peers_to_process_new.clone();
         println!("Initial peers: {:?}", *peers);
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 

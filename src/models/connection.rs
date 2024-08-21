@@ -11,7 +11,7 @@ use tokio::sync::Mutex;
 
 
 
-pub async fn connect_and_sync(peer: String, blockchain: Arc<Mutex<Blockchain>>) {
+pub async fn connect_and_sync(peer: String, own_address: String, blockchain: Arc<Mutex<Blockchain>>) {
     if let Ok(mut stream) = TcpStream::connect(peer.clone()).await {
         println!("Connected to peer: {}", peer);
         
@@ -32,6 +32,12 @@ pub async fn connect_and_sync(peer: String, blockchain: Arc<Mutex<Blockchain>>) 
             println!("Replacing local blockchain with peer's blockchain");
             *local_blockchain = peer_blockchain;
         }
+
+        
+        // Request the blockchain
+        let request = "NEW_PEER".to_owned()+&own_address;
+        println!("seding peer request {}", request);
+        stream.write_all(request.as_bytes()).await.unwrap();
     } else {
         println!("Failed to connect to peer: {}", peer);
     }
@@ -43,8 +49,9 @@ pub  async fn handle_connection(mut stream: TcpStream, blockchain: Arc<Mutex<Blo
     // Read the incoming data
     let n = stream.read(&mut buffer).await.unwrap();
     let request = String::from_utf8_lossy(&buffer[..n]);
-
+    println!("request is {}", &request[..10]);
     if request == "GET_BLOCKCHAIN" {
+        println!("got requiest for sync");
         // Handle blockchain sync request
         let blockchain = blockchain.lock().await;
         let serialized_blockchain = serde_json::to_string(&*blockchain).unwrap();
@@ -69,12 +76,10 @@ pub  async fn handle_connection(mut stream: TcpStream, blockchain: Arc<Mutex<Blo
         }
     } else if request.starts_with("NEW_PEER") {
              let new_peer = request["NEW_PEER".len()..].to_string();
+             println!("adding peer {}", new_peer);
              let mut peers_lock = peers.lock().await;
              if !peers_lock.contains(&new_peer) {
                  peers_lock.push(new_peer.clone());
-                 let blockchain = Arc::clone(&blockchain);
-                 let peers = Arc::clone(&peers);
-                 // start_listener(new_peer.clone(), blockchain, peers).await.unwrap()
              }
         }
     else {
@@ -121,23 +126,19 @@ pub async fn send_message_to_peer(peer_address: String, message: String) -> Resu
     Ok(())
 }
 
-pub async fn start_listener(address:String, blockchain: Arc<Mutex<Blockchain>>, peers: Arc<Mutex<Vec<String>>>) -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind(address.clone()).await?;
-    println!("Listening on {}", address);
-
-    loop {
-        // Wait for an incoming connection
-        let (stream, _) = listener.accept().await?;
-        
-        // Clone the blockchain Arc and transaction sender for the new task
+pub async fn start_listener(address:String, blockchain: Arc<Mutex<Blockchain>>, peers: Arc<Mutex<Vec<String>>>) {
+    let Ok(listener) = TcpListener::bind(address.clone()).await else {println!{"addres cant bind"}; return};
+    
+    
+    while let Ok((stream, _)) = listener.accept().await {
         let blockchain = Arc::clone(&blockchain);
         let peers = Arc::clone(&peers);
 
-        // Spawn a new task to handle the connection concurrently
-        tokio::spawn(async move {
-            handle_connection(stream, blockchain, peers).await;
-
-        });
+        // Spawn a new task to handle the connection
+        
+        handle_connection(stream, blockchain, peers).await
+        
     }
+    
     
 }
