@@ -1,11 +1,12 @@
 
 use super::block::Block;
-use super::transaction::{Transaction, UTXO, Transfer};
+use super::transaction::{Transaction, UTXO, Transfer, Transactions};
 use std::collections::HashMap;
 use super::transaction_util::from_transfer_to_utxo;
+use serde::{Deserialize, Serialize};
 
 // `Blockchain` A struct that represents the blockchain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub difficulty: usize,
@@ -56,6 +57,10 @@ impl Blockchain {
         true
     }
 
+    pub fn add_block(&mut self, block: Block) {
+        self.chain.push(block);
+    }
+
     pub fn add_transfer(&mut self, transfer : Transfer){
         let transaction : Transaction = from_transfer_to_utxo(transfer, &self.utxo_set);
         self.add_transaction(transaction.inputs, transaction.outputs);
@@ -78,5 +83,9 @@ impl Blockchain {
         self.utxo_set.get(address).map_or(0, |utxos| {
             utxos.iter().map(|utxo| utxo.value).sum()
         })
+    }
+
+    pub fn collect_pending_transactions(&self) -> Transactions {
+        vec![]
     }
 }

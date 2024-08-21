@@ -68,4 +68,8 @@ impl Block {
     
             format!("{:x}", result)
         }
+    
+    pub fn is_valid_proof_of_work(&self, difficulty : usize) -> bool{
+        self.hash.starts_with(&"0".repeat(difficulty))
+    }
 }
