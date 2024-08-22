@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Sender;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
+use std::cmp::min;
 
 
 pub async fn connect_and_sync(peer: String, own_address: String, blockchain: Arc<Mutex<Blockchain>>) {
@@ -23,7 +23,7 @@ pub async fn connect_and_sync(peer: String, own_address: String, blockchain: Arc
         let mut buffer = vec![0; 4096];
         let n = stream.read(&mut buffer).await.unwrap();
         let response = String::from_utf8(buffer[..n].to_vec()).unwrap();
-
+        println!("{}",response);
         let peer_blockchain: Blockchain = serde_json::from_str(&response).unwrap();
 
         // Replace the local blockchain if the peer's blockchain is longer
@@ -32,12 +32,16 @@ pub async fn connect_and_sync(peer: String, own_address: String, blockchain: Arc
             println!("Replacing local blockchain with peer's blockchain");
             *local_blockchain = peer_blockchain;
         }
-
-        
+    } else {
+        println!("Failed to connect to peer: {}", peer);
+    }
+    if let Ok(mut stream) = TcpStream::connect(peer.clone()).await {
         // Request the blockchain
         let request = "NEW_PEER".to_owned()+&own_address;
-        println!("seding peer request {}", request);
-        stream.write_all(request.as_bytes()).await.unwrap();
+        println!("sending peer request {}", request);
+        stream.write_all(request.as_bytes()).await;
+
+
     } else {
         println!("Failed to connect to peer: {}", peer);
     }
@@ -49,9 +53,17 @@ pub  async fn handle_connection(mut stream: TcpStream, blockchain: Arc<Mutex<Blo
     // Read the incoming data
     let n = stream.read(&mut buffer).await.unwrap();
     let request = String::from_utf8_lossy(&buffer[..n]);
+    match stream.peer_addr() {
+        Ok(remote_addr) => {
+            println!("{} _ {}", remote_addr, &request[..min(20,n)]);
+        }
+        Err(e) => {
+            println!("Failed to get remote address: {}", e);
+        }
+    }
     println!("request is {}", &request[..10]);
     if request == "GET_BLOCKCHAIN" {
-        println!("got requiest for sync");
+        println!("got request for sync");
         // Handle blockchain sync request
         let blockchain = blockchain.lock().await;
         let serialized_blockchain = serde_json::to_string(&*blockchain).unwrap();
@@ -136,7 +148,7 @@ pub async fn start_listener(address:String, blockchain: Arc<Mutex<Blockchain>>, 
 
         // Spawn a new task to handle the connection
         
-        handle_connection(stream, blockchain, peers).await
+        tokio::spawn(handle_connection(stream, blockchain, peers));
         
     }
     
