@@ -2,7 +2,7 @@
 use chrono::prelude::*;
 use sha2::{Sha256, Digest};
 use serde::{Deserialize, Serialize};
-use super::transaction::Transactions;
+use super::transaction::Transaction;
 
 // `Block`, A struct that represents a block in a Blockchain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct Block {
    // The current block hash.
    pub hash: String,
 
-   pub transactions : Transactions
+   pub transactions : Transaction
 }
 impl Block {
 
@@ -27,7 +27,7 @@ impl Block {
     pub fn new (
         index: u64,
         previous_hash: String,
-        transactions : Transactions
+        transactions : Transaction
     ) -> Self {
         // Current block to be created.
         let block = Block {
